@@ -15,9 +15,9 @@ build/
 .pytest_cache/
 .ruff_cache/
 
-# iOS / Xcode
+# iOS / Xcode — keep project.pbxproj, exclude per-user state
 ios/KansScout.xcodeproj/xcuserdata/
-ios/KansScout.xcworkspace/xcuserdata/
+ios/KansScout.xcodeproj/project.xcworkspace/xcuserdata/
 ios/KansScout/Config.plist
 DerivedData/
 *.ipa
