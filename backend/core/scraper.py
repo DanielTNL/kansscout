@@ -61,26 +61,63 @@ class RawSignal:
 # Collectors
 # ---------------------------------------------------------------------------
 
+_TRENDS_KEYWORDS = [
+    "online business nederland",
+    "niche webshop starten",
+    "freelance diensten nederland",
+    "digitaal product verkopen",
+    "saas nederland",
+    "app idee nederland",
+]
+
+
 def _collect_google_trends() -> list[RawSignal]:
     signals: list[RawSignal] = []
     try:
         from pytrends.request import TrendReq
 
-        pytrends = TrendReq(hl="nl-NL", tz=60, timeout=(10, 30))
-        trending = pytrends.trending_searches(pn="netherlands")
-        if trending is not None and not trending.empty:
-            for i, query in enumerate(trending[0].head(20)):
-                signals.append(
-                    RawSignal(
-                        source="google_trends",
-                        title=str(query),
-                        summary=f"Trending zoekopdracht in Nederland: {query}",
-                        url=f"https://trends.google.com/trends/explore?q={query}&geo=NL",
-                        category="Business Services",
-                        trend_score=max(0.0, 100.0 - i * 5),
-                        collected_at=datetime.utcnow(),
+        pytrends = TrendReq(hl="nl-NL", tz=60, timeout=(10, 30), retries=2, backoff_factor=0.5)
+
+        # Build payload for a set of keywords and fetch interest over time
+        pytrends.build_payload(_TRENDS_KEYWORDS, cat=0, timeframe="now 7-d", geo="NL")
+        interest = pytrends.interest_over_time()
+
+        if interest is not None and not interest.empty:
+            # Average score per keyword across the period
+            for i, keyword in enumerate(_TRENDS_KEYWORDS):
+                if keyword in interest.columns:
+                    avg_score = float(interest[keyword].mean())
+                    signals.append(
+                        RawSignal(
+                            source="google_trends",
+                            title=keyword,
+                            summary=f"Google Trends NL (7d gemiddelde): {avg_score:.0f}/100 — {keyword}",
+                            url=f"https://trends.google.com/trends/explore?q={keyword}&geo=NL",
+                            category="Business Services",
+                            trend_score=avg_score,
+                            collected_at=datetime.utcnow(),
+                        )
                     )
-                )
+        # Also try related queries for richer signals
+        related = pytrends.related_queries()
+        for keyword, data in related.items():
+            rising = data.get("rising")
+            if rising is not None and not rising.empty:
+                for j, row in rising.head(5).iterrows():
+                    query = str(row.get("query", ""))
+                    value = float(row.get("value", 50))
+                    if query:
+                        signals.append(
+                            RawSignal(
+                                source="google_trends_rising",
+                                title=query,
+                                summary=f"Stijgende zoekopdracht gerelateerd aan '{keyword}': {query}",
+                                url=f"https://trends.google.com/trends/explore?q={query}&geo=NL",
+                                category="Business Services",
+                                trend_score=min(100.0, value),
+                                collected_at=datetime.utcnow(),
+                            )
+                        )
     except Exception as exc:
         print(f"[scraper] Google Trends error: {exc}")
     return signals
